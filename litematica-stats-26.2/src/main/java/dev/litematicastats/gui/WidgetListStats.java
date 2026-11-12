@@ -16,6 +16,8 @@ import java.util.Collection;
 import java.util.List;
 
 public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry> {
+    private static final int MIN_SCROLLBAR_HANDLE_HEIGHT = 20;
+
     private final StatsHost host;
     private boolean hasHeader;
     private int headerHeight;
@@ -119,7 +121,13 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
 
     @Override
     protected void offsetSelectionOrScrollbar(int amount, boolean changeSelection) {
-        this.scrollBar.offsetValue(amount * this.browserEntryHeight);
+        int step = Math.max(this.browserEntryHeight, this.contentTotalHeight / 40);
+        this.scrollBar.offsetValue(amount * step);
+    }
+
+    private static int capScrollbarTotal(int totalHeight, int scrollbarHeight) {
+        int slideHeight = Math.max(1, scrollbarHeight - 2);
+        return Math.min(totalHeight, slideHeight * slideHeight / MIN_SCROLLBAR_HANDLE_HEIGHT);
     }
 
     @Override
@@ -129,7 +137,7 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
         int totalHeight = Math.max(this.contentTotalHeight, scrollbarHeight);
         this.scrollBar.render(ctx, mouseX, mouseY, partialTicks,
                 this.posX + this.browserWidth - 9, this.browserEntriesStartY + this.browserEntriesOffsetY,
-                8, scrollbarHeight, totalHeight);
+                8, scrollbarHeight, capScrollbarTotal(totalHeight, scrollbarHeight));
         if (this.scrollBar.getValue() != this.lastScrollbarPosition) {
             this.lastScrollbarPosition = this.scrollBar.getValue();
             this.reCreateListEntryWidgets();
