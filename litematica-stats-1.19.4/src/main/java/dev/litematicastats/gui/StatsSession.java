@@ -6,6 +6,8 @@ import dev.litematicastats.data.StatsCollector;
 import fi.dy.masa.litematica.schematic.LitematicaSchematic;
 import fi.dy.masa.malilib.gui.GuiBase;
 import fi.dy.masa.malilib.util.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
@@ -70,9 +72,11 @@ public class StatsSession {
     private final LitematicaSchematic schematic;
     private final List<EntityCount> entities;
     private final List<ContainerInfo> containers;
+    private static final Logger LOGGER = LoggerFactory.getLogger("litematica-stats");
     private final Set<String> collapsedCategories = new HashSet<>();
     private final Set<ContainerInfo> ignoredContainers = new HashSet<>();
     private final Map<ContainerInfo, List<StatsEntry>> itemRowsCache = new IdentityHashMap<>();
+    private final Map<ContainerInfo, String> contentKeys = new IdentityHashMap<>();
     private boolean hideEmpty = true;
     private boolean aggregateItems = false;
     private int sortColumn = 0;
@@ -86,9 +90,12 @@ public class StatsSession {
     public final int aggregatedTypeCount;
 
     public StatsSession(@Nullable LitematicaSchematic schematic) {
+        long t0 = System.nanoTime();
         this.schematic = schematic;
         this.entities = schematic != null ? StatsCollector.collectEntities(schematic) : List.of();
+        long t1 = System.nanoTime();
         this.containers = schematic != null ? StatsCollector.collectContainers(schematic) : List.of();
+        long t2 = System.nanoTime();
 
         int nameWidth = StringUtils.getStringWidth(GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.name") + GuiBase.TXT_RST);
         int countWidth = StringUtils.getStringWidth(GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.count") + GuiBase.TXT_RST);
@@ -99,16 +106,24 @@ public class StatsSession {
         this.maxEntityNameWidth = nameWidth;
         this.maxEntityCountWidth = countWidth;
 
+        // 名称列宽只需按不同物品类型测量，避免对每个物品栈都做一次字体测量。
         int itemNameWidth = StringUtils.getStringWidth(GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.item") + GuiBase.TXT_RST);
-        Set<ItemKey> allTypes = new HashSet<>();
+        Map<ItemKey, ItemStack> uniqueItems = new LinkedHashMap<>();
         for (ContainerInfo container : this.containers) {
             for (ContainerInfo.SlotStack slot : container.items) {
-                itemNameWidth = Math.max(itemNameWidth, StringUtils.getStringWidth(slot.stack().getHoverName().getString()) + 24);
-                allTypes.add(new ItemKey(slot.stack().getItem(), slot.stack().getTag()));
+                uniqueItems.putIfAbsent(new ItemKey(slot.stack().getItem(), slot.stack().getTag()), slot.stack());
             }
         }
+        for (ItemStack stack : uniqueItems.values()) {
+            itemNameWidth = Math.max(itemNameWidth, StringUtils.getStringWidth(stack.getHoverName().getString()) + 24);
+        }
         this.maxAggregateItemNameWidth = itemNameWidth;
-        this.aggregatedTypeCount = allTypes.size();
+        this.aggregatedTypeCount = uniqueItems.size();
+
+        long t3 = System.nanoTime();
+        LOGGER.info("Stats scan: entities {} ms, containers {} ms ({} containers, {} item types), layout {} ms",
+                (t1 - t0) / 1_000_000, (t2 - t1) / 1_000_000, this.containers.size(), uniqueItems.size(),
+                (t3 - t2) / 1_000_000);
     }
 
     public boolean hasSchematic() {
@@ -215,6 +230,10 @@ public class StatsSession {
     }
 
     private String contentKey(ContainerInfo container) {
+        return this.contentKeys.computeIfAbsent(container, StatsSession::buildContentKey);
+    }
+
+    private static String buildContentKey(ContainerInfo container) {
         StringBuilder key = new StringBuilder(container.typeKey);
         for (ContainerInfo.SlotStack slot : container.items) {
             key.append('|').append(slot.slot()).append(':')
@@ -307,7 +326,7 @@ public class StatsSession {
         if (this.contentsFilter.isEmpty()) {
             return true;
         }
-        if (container.typeName.toLowerCase().contains(this.contentsFilter)
+        if (container.typeNameLower.contains(this.contentsFilter)
                 || container.positionString().contains(this.contentsFilter)
                 || container.region.toLowerCase().contains(this.contentsFilter)) {
             return true;

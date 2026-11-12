@@ -18,6 +18,7 @@ public class ContainerInfo {
     public final BlockState state;
     public final String typeKey;
     public final String typeName;
+    public final String typeNameLower;
     public final ItemStack icon;
     @Nullable
     public final Component customName;
@@ -44,6 +45,7 @@ public class ContainerInfo {
         this.state = state;
         this.typeKey = typeKey;
         this.typeName = typeName;
+        this.typeNameLower = typeName.toLowerCase();
         this.icon = icon;
         this.customName = customName;
         this.doubleChest = doubleChest;

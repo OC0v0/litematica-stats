@@ -193,7 +193,7 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
             case CATEGORY, SINGLE_GROUP -> strings.add(entry.title.toLowerCase());
             case STRIP -> {
                 for (ContainerInfo container : entry.stripContainers) {
-                    strings.add(container.typeName.toLowerCase());
+                    strings.add(container.typeNameLower);
                     strings.add(container.positionString());
                     strings.add(container.region.toLowerCase());
                     if (container.customName != null) {

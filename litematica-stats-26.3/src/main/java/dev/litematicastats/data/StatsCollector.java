@@ -34,6 +34,7 @@ import net.minecraft.world.level.block.state.properties.ChestType;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -117,7 +118,7 @@ public class StatsCollector {
             collectEntityContainers(schematic, region, registry, result);
         }
 
-        result.sort(Comparator.comparing((ContainerInfo c) -> c.typeName.toLowerCase())
+        result.sort(Comparator.comparing((ContainerInfo c) -> c.typeNameLower)
                 .thenComparing(c -> c.region)
                 .thenComparingInt(c -> c.pos.getX())
                 .thenComparingInt(c -> c.pos.getY())
@@ -134,6 +135,7 @@ public class StatsCollector {
         }
 
         Set<BlockPos> processed = new HashSet<>();
+        Map<BlockState, BlockMeta> metaCache = new HashMap<>();
         for (Map.Entry<BlockPos, CompoundData> entry : blockEntities.entrySet()) {
             BlockPos pos = entry.getKey();
             if (processed.contains(pos)) {
@@ -172,18 +174,23 @@ public class StatsCollector {
                 items = parseItems(tag, registry);
             }
 
-            ItemStack icon = ItemUtils.getItemForState(state);
-            if (icon.isEmpty()) {
-                icon = new ItemStack(state.getBlock().asItem());
+            BlockMeta meta = metaCache.get(state);
+            if (meta == null) {
+                ItemStack icon = ItemUtils.getItemForState(state);
+                if (icon.isEmpty()) {
+                    icon = new ItemStack(state.getBlock().asItem());
+                }
+                meta = new BlockMeta(icon,
+                        String.valueOf(BuiltInRegistries.BLOCK.getKey(state.getBlock())),
+                        state.getBlock().getName().getString());
+                metaCache.put(state, meta);
             }
-            String typeKey = String.valueOf(BuiltInRegistries.BLOCK.getKey(state.getBlock()));
-            String typeName = state.getBlock().getName().getString();
             Component customName = readCustomName(tag, registry);
             boolean singleSlot = !tag.contains("Items", 9);
-            int[] grid = singleSlot ? new int[]{1, 1} : blockGrid(typeKey, doubleChest, maxSlot(items));
+            int[] grid = singleSlot ? new int[]{1, 1} : blockGrid(meta.typeKey, doubleChest, maxSlot(items));
 
-            result.add(new ContainerInfo(region, displayPos, false, null, state, typeKey, typeName,
-                    icon, customName, doubleChest, items, grid[0], grid[1]));
+            result.add(new ContainerInfo(region, displayPos, false, null, state, meta.typeKey, meta.typeName,
+                    meta.icon, customName, doubleChest, items, grid[0], grid[1]));
         }
     }
 
@@ -340,8 +347,23 @@ public class StatsCollector {
         return Math.max(known, roundUpToMultiple(maxSlot(items) + 1, columns, columns));
     }
 
+    private static final class BlockMeta {
+        final ItemStack icon;
+        final String typeKey;
+        final String typeName;
+
+        BlockMeta(ItemStack icon, String typeKey, String typeName) {
+            this.icon = icon;
+            this.typeKey = typeKey;
+            this.typeName = typeName;
+        }
+    }
+
     @Nullable
     public static Component readCustomName(CompoundData tag, RegistryAccess registry) {
+        if (!tag.contains("CustomName", 8) && !tag.contains("CustomName", 10)) {
+            return null;
+        }
         // With litematica's datafixer bypassed, old schematics keep the legacy JSON string form
         BaseData raw = tag.getData("CustomName").orElse(null);
         if (raw instanceof StringData stringData) {
