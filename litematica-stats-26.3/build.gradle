@@ -1,0 +1,64 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:intermediary:0.0.0:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// Compile against the exact jars used at runtime; loom remaps them
+	// from intermediary to the named (Mojang) mappings used in dev.
+	// modImplementation also puts them on the dev runtime classpath;
+	// they are NOT bundled into the jar (provided by the mods folder in production).
+	modImplementation fileTree(dir: "libs", include: ["*.jar"])
+
+	// Needed by malilib at runtime in the dev environment only.
+	runtimeOnly "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	compileOnly "com.google.code.findbugs:jsr305:3.0.2"
+}
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": inputs.properties.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = "UTF-8"
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	from("LICENSE") {
+		rename { "${it}_${project.base.archivesName.get()}" }
+	}
+}
+
+tasks.register("copyToOutput", Copy) {
+	from(tasks.named("remapJar"))
+	into file("${rootDir.parent}/output")
+}
+
+tasks.named("build") {
+	finalizedBy tasks.named("copyToOutput")
+}

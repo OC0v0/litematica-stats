@@ -1,0 +1,14 @@
+{
+	"required": true,
+	"package": "dev.litematicastats.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"GuiListBaseWidgetAccessor",
+		"MaterialListPlacementAccessor",
+		"MaterialListSchematicAccessor",
+		"MixinGuiMaterialList"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

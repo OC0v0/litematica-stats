@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "litematica-stats",
+	"version": "${version}",
+	"name": "Litematica Stats",
+	"description": "Extends Litematica material list with entity and container-content tabs.",
+	"authors": ["OClock0v0"],
+	"license": "MIT",
+	"icon": "assets/litematicastats/icon.png",
+	"contact": {
+		"homepage": "https://modrinth.com/mod/litematica-stats"
+	},
+	"environment": "client",
+	"mixins": ["litematica-stats.mixins.json"],
+	"depends": {
+		"minecraft": ">=26.3 <26.4",
+		"litematica": "*",
+		"malilib": "*"
+	}
+}
