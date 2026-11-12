@@ -28,6 +28,44 @@ public class StatsSession {
     public static final int CELL_SIZE = 18;
     public static final int CARD_GAP = 4;
 
+    private static String ignoreLabel;
+    private static String ignoredLabel;
+    private static int ignoreLabelWidth;
+    private static int ignoredLabelWidth;
+
+    public static String ignoreLabel() {
+        ensureLabels();
+        return ignoreLabel;
+    }
+
+    public static String ignoredLabel() {
+        ensureLabels();
+        return ignoredLabel;
+    }
+
+    public static int ignoreLabelWidth() {
+        ensureLabels();
+        return ignoreLabelWidth;
+    }
+
+    public static int ignoredLabelWidth() {
+        ensureLabels();
+        return ignoredLabelWidth;
+    }
+
+    public static int ignoredButtonWidth() {
+        return ignoredLabelWidth() + 10;
+    }
+
+    private static void ensureLabels() {
+        if (ignoredLabel == null) {
+            ignoreLabel = StringUtils.translate("litematica-stats.gui.button.ignore");
+            ignoredLabel = StringUtils.translate("litematica-stats.gui.button.ignored");
+            ignoreLabelWidth = StringUtils.getStringWidth(ignoreLabel);
+            ignoredLabelWidth = StringUtils.getStringWidth(ignoredLabel);
+        }
+    }
+
     @Nullable
     private final LitematicaSchematic schematic;
     private final List<EntityCount> entities;
@@ -218,7 +256,7 @@ public class StatsSession {
 
     public static int cardWidth(ContainerInfo container) {
         int gridWidth = container.gridColumns * CELL_SIZE + CARD_PAD * 2;
-        int buttonWidth = StringUtils.getStringWidth(StringUtils.translate("litematica-stats.gui.button.ignored")) + 10;
+        int buttonWidth = ignoredButtonWidth();
         int badgeWidth = container.mergedCount > 1 ? StringUtils.getStringWidth("x" + container.mergedCount) + 8 : 0;
         int titleWidth = StringUtils.getStringWidth(container.typeName) + buttonWidth + badgeWidth + CARD_PAD * 2 + 10;
         return Math.max(gridWidth, Math.min(titleWidth, 240));
@@ -292,9 +330,16 @@ public class StatsSession {
         List<StatsEntry> rows = new ArrayList<>();
         if (tab == StatsTab.ENTITIES) {
             List<EntityCount> sorted = new ArrayList<>(this.entities);
-            Comparator<EntityCount> comparator = this.sortColumn == 1
-                    ? Comparator.comparingInt(EntityCount::count)
-                    : Comparator.comparing(e -> e.name().getString().toLowerCase());
+            Comparator<EntityCount> comparator;
+            if (this.sortColumn == 1) {
+                comparator = Comparator.comparingInt(EntityCount::count);
+            } else {
+                Map<EntityCount, String> sortNames = new IdentityHashMap<>();
+                for (EntityCount entry : sorted) {
+                    sortNames.put(entry, entry.name().getString().toLowerCase());
+                }
+                comparator = Comparator.comparing(sortNames::get);
+            }
             if (this.sortReverse) {
                 comparator = comparator.reversed();
             }
@@ -409,7 +454,7 @@ public class StatsSession {
         List<ItemAggregate> sorted = new ArrayList<>(aggregated.values());
         Comparator<ItemAggregate> comparator = this.sortColumn == 1
                 ? Comparator.comparingInt(a -> a.count)
-                : Comparator.comparing(a -> a.stack.getHoverName().getString().toLowerCase());
+                : Comparator.comparing(a -> a.nameLower);
         if (this.sortReverse) {
             comparator = comparator.reversed();
         }
@@ -471,10 +516,12 @@ public class StatsSession {
 
     private static class ItemAggregate {
         final ItemStack stack;
+        final String nameLower;
         int count;
 
         ItemAggregate(ItemStack stack) {
             this.stack = stack;
+            this.nameLower = stack.getHoverName().getString().toLowerCase();
         }
     }
 }

@@ -31,6 +31,7 @@ public class ContainerInfo {
     public List<ContainerInfo> mergedMembers;
 
     private final ItemStack[] slotsArray;
+    private String positionString;
 
     public ContainerInfo(String region, BlockPos pos, boolean entity, @Nullable String entityId,
                          @Nullable BlockState state, String typeKey, String typeName, ItemStack icon,
@@ -71,7 +72,10 @@ public class ContainerInfo {
     }
 
     public String positionString() {
-        return String.format("(%d, %d, %d)", this.pos.getX(), this.pos.getY(), this.pos.getZ());
+        if (this.positionString == null) {
+            this.positionString = "(" + this.pos.getX() + ", " + this.pos.getY() + ", " + this.pos.getZ() + ")";
+        }
+        return this.positionString;
     }
 
     public record SlotStack(int slot, ItemStack stack) {

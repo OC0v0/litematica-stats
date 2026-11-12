@@ -30,6 +30,11 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
     private final WidgetListStats listWidget;
     private final StatsEntry entry;
     private final boolean isOdd;
+    private String displayText;
+    private String countText;
+    private String headerFirst;
+    private String headerSecond;
+    private List<CardRender> cards;
 
     public WidgetStatsEntry(int x, int y, int width, int height, boolean isOdd, StatsEntry entry,
                             int listIndex, WidgetListStats listWidget, StatsHost host) {
@@ -44,9 +49,9 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
             int cx = x;
             for (ContainerInfo container : entry.stripContainers) {
                 int cardWidth = StatsSession.cardWidth(container);
-                String label = StringUtils.translate(host.isIgnored(container)
-                        ? "litematica-stats.gui.button.ignored" : "litematica-stats.gui.button.ignore");
-                int btnWidth = this.getStringWidth(label) + 10;
+                boolean ignored = host.isIgnored(container);
+                String label = ignored ? StatsSession.ignoredLabel() : StatsSession.ignoreLabel();
+                int btnWidth = (ignored ? StatsSession.ignoredLabelWidth() : StatsSession.ignoreLabelWidth()) + 10;
                 ButtonGeneric button = new ButtonGeneric(cx + cardWidth - btnWidth - StatsSession.CARD_PAD, y + 3, btnWidth, 14, label);
                 this.addButton(button, (btn, mouseButton) -> {
                     host.toggleIgnored(container);
@@ -56,11 +61,80 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
             }
         } else if ((entry.kind == StatsEntry.Kind.CATEGORY && !StatsSession.IGNORED_KEY.equals(entry.categoryKey))
                 || entry.kind == StatsEntry.Kind.SINGLE_GROUP) {
-            String label = StringUtils.translate(host.isCategoryIgnored(entry.categoryKey)
-                    ? "litematica-stats.gui.button.ignored" : "litematica-stats.gui.button.ignore");
-            int btnWidth = this.getStringWidth(label) + 10;
+            boolean ignored = host.isCategoryIgnored(entry.categoryKey);
+            String label = ignored ? StatsSession.ignoredLabel() : StatsSession.ignoreLabel();
+            int btnWidth = (ignored ? StatsSession.ignoredLabelWidth() : StatsSession.ignoreLabelWidth()) + 10;
             ButtonGeneric button = new ButtonGeneric(x + width - btnWidth - 4, y + 4, btnWidth, 14, label);
             this.addButton(button, (btn, mouseButton) -> host.toggleCategoryIgnored(entry.categoryKey));
+        }
+
+        // 文本与测宽只在构建时计算一次，渲染时直接复用，避免每帧翻译与字体测量。
+        switch (entry.kind) {
+            case ENTITY -> {
+                String name = entry.entity.name().getString();
+                if (entry.entity.hasInventory()) {
+                    name += GuiBase.TXT_GOLD + " *" + GuiBase.TXT_RST;
+                }
+                this.displayText = name;
+                this.countText = String.valueOf(entry.entity.count());
+            }
+            case ITEM -> {
+                boolean aggregate = this.isAggregateItemView();
+                int textX = aggregate ? this.getColumnPosX(0) + 20 : this.x + 44;
+                int countX = aggregate ? this.getColumnPosX(1) : this.x + this.width - 60;
+                this.displayText = this.truncate(this.itemDisplayName(entry.stack), countX - textX - 8);
+                this.countText = aggregate ? String.valueOf(entry.count) : "x" + entry.count;
+            }
+            case CATEGORY, SINGLE_GROUP -> {
+                String color = entry.kind == StatsEntry.Kind.SINGLE_GROUP ? GuiBase.TXT_LIGHT_PURPLE : GuiBase.TXT_AQUA;
+                int tx = this.x + (entry.holderIcon != null ? 24 : 4);
+                int titleMax = this.x + this.width - tx - 24 - StatsSession.ignoredLabelWidth();
+                this.displayText = color + GuiBase.TXT_BOLD + this.truncate(entry.title, Math.max(20, titleMax)) + GuiBase.TXT_RST;
+            }
+            case HEADER -> {
+                String firstColumn = this.isAggregateItemView() ? "litematica-stats.gui.label.column.item" : "litematica-stats.gui.label.column.name";
+                this.headerFirst = GuiBase.TXT_BOLD + StringUtils.translate(firstColumn) + GuiBase.TXT_RST;
+                this.headerSecond = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.count") + GuiBase.TXT_RST;
+            }
+            case STRIP -> {
+                this.cards = new ArrayList<>(entry.stripContainers.size());
+                for (ContainerInfo container : entry.stripContainers) {
+                    int cardWidth = StatsSession.cardWidth(container);
+                    int cardHeight = StatsSession.cardHeight(container);
+                    String title = container.typeName;
+                    if (container.customName != null) {
+                        title += GuiBase.TXT_AQUA + GuiBase.TXT_ITALIC + " \"" + container.customName.getString() + "\"" + GuiBase.TXT_RST;
+                    }
+                    if (host.isIgnored(container)) {
+                        title += GuiBase.TXT_RED + " [" + StatsSession.ignoredLabel() + "]" + GuiBase.TXT_RST;
+                    }
+                    String badge = container.mergedCount > 1 ? "x" + container.mergedCount : null;
+                    int badgeTextWidth = badge != null ? this.getStringWidth(badge) : 0;
+                    int badgeX = cardWidth - StatsSession.ignoredButtonWidth() - 8 - badgeTextWidth;
+                    int titleMax = badgeX - 4 - StatsSession.CARD_PAD;
+                    this.cards.add(new CardRender(cardWidth, cardHeight, badgeX,
+                            this.truncate(title, Math.max(titleMax, 20)), badge));
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    private static final class CardRender {
+        final int width;
+        final int height;
+        final int badgeX;
+        final String title;
+        @Nullable
+        final String badge;
+
+        CardRender(int width, int height, int badgeX, String title, @Nullable String badge) {
+            this.width = width;
+            this.height = height;
+            this.badgeX = badgeX;
+            this.title = title;
+            this.badge = badge;
         }
     }
 
@@ -151,11 +225,8 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
 
     private void renderHeader(GuiGraphics ctx, int mouseX, int mouseY) {
         int y = this.y + 7;
-        String firstColumn = this.isAggregateItemView() ? "litematica-stats.gui.label.column.item" : "litematica-stats.gui.label.column.name";
-        this.drawString(this.getColumnPosX(0), y, -1,
-                GuiBase.TXT_BOLD + StringUtils.translate(firstColumn) + GuiBase.TXT_RST, ctx);
-        this.drawString(this.getColumnPosX(1), y, -1,
-                GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.count") + GuiBase.TXT_RST, ctx);
+        this.drawString(this.getColumnPosX(0), y, -1, this.headerFirst, ctx);
+        this.drawString(this.getColumnPosX(1), y, -1, this.headerSecond, ctx);
         if (!this.listWidget.getSearchBarWidget().isSearchOpen()) {
             this.renderColumnHeader(mouseX, mouseY, Icons.ARROW_DOWN, Icons.ARROW_UP);
         }
@@ -166,17 +237,12 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         int y = this.y + 3;
         RenderUtils.drawRect(x1, y, 16, 16, COLOR_ICON_BG);
         ctx.renderItem(this.entry.entity.icon(), x1, y);
-        String name = this.entry.entity.name().getString();
-        if (this.entry.entity.hasInventory()) {
-            name = name + GuiBase.TXT_GOLD + " *" + GuiBase.TXT_RST;
-        }
-        this.drawString(x1 + 20, this.y + 7, -1, name, ctx);
-        this.drawString(this.getColumnPosX(1), this.y + 7, -1, String.valueOf(this.entry.entity.count()), ctx);
+        this.drawString(x1 + 20, this.y + 7, -1, this.displayText, ctx);
+        this.drawString(this.getColumnPosX(1), this.y + 7, -1, this.countText, ctx);
     }
 
     private void renderCategory(GuiGraphics ctx) {
         boolean collapsed = this.host.isCategoryCollapsed(this.entry.categoryKey);
-        String color = this.entry.kind == StatsEntry.Kind.SINGLE_GROUP ? GuiBase.TXT_LIGHT_PURPLE : GuiBase.TXT_AQUA;
         int tx = this.x + 4;
         if (this.entry.holderIcon != null) {
             int y = this.y + 3;
@@ -185,9 +251,7 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
             tx = this.x + 24;
         }
         this.renderTriangle(tx, this.y + 7, collapsed);
-        int titleMax = this.x + this.width - tx - 12 - this.getStringWidth(StringUtils.translate("litematica-stats.gui.button.ignored")) - 12;
-        this.drawString(tx + 12, this.y + 7, -1,
-                color + GuiBase.TXT_BOLD + this.truncate(this.entry.title, Math.max(20, titleMax)) + GuiBase.TXT_RST, ctx);
+        this.drawString(tx + 12, this.y + 7, -1, this.displayText, ctx);
     }
 
     private void renderTriangle(int x, int y, boolean collapsed) {
@@ -204,32 +268,18 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
 
     private void renderStrip(GuiGraphics ctx) {
         int cx = this.x;
-        for (ContainerInfo container : this.entry.stripContainers) {
-            int cardWidth = StatsSession.cardWidth(container);
-            int cardHeight = StatsSession.cardHeight(container);
+        for (int i = 0; i < this.entry.stripContainers.size(); i++) {
+            ContainerInfo container = this.entry.stripContainers.get(i);
+            CardRender card = this.cards.get(i);
             boolean ignored = this.host.isIgnored(container);
-            RenderUtils.drawRect(cx, this.y, cardWidth, cardHeight, ignored ? 0x60402020 : 0x60000000);
-            RenderUtils.drawOutline(cx, this.y, cardWidth, cardHeight, ignored ? 0xFF804040 : 0xFF606060);
-
-            String title = container.typeName;
-            if (container.customName != null) {
-                title += GuiBase.TXT_AQUA + GuiBase.TXT_ITALIC + " \"" + container.customName.getString() + "\"" + GuiBase.TXT_RST;
+            RenderUtils.drawRect(cx, this.y, card.width, card.height, ignored ? 0x60402020 : 0x60000000);
+            RenderUtils.drawOutline(cx, this.y, card.width, card.height, ignored ? 0xFF804040 : 0xFF606060);
+            this.drawString(cx + StatsSession.CARD_PAD, this.y + 6, -1, card.title, ctx);
+            if (card.badge != null) {
+                this.drawString(cx + card.badgeX, this.y + 6, -1, GuiBase.TXT_GOLD + card.badge + GuiBase.TXT_RST, ctx);
             }
-            if (ignored) {
-                title += GuiBase.TXT_RED + " [" + StringUtils.translate("litematica-stats.gui.button.ignored") + "]" + GuiBase.TXT_RST;
-            }
-            int buttonWidth = this.getStringWidth(StringUtils.translate("litematica-stats.gui.button.ignored")) + 10;
-            String badge = container.mergedCount > 1 ? "x" + container.mergedCount : null;
-            int badgeTextWidth = badge != null ? this.getStringWidth(badge) : 0;
-            int badgeX = cx + cardWidth - buttonWidth - 8 - badgeTextWidth;
-            int titleMax = badgeX - 4 - (cx + StatsSession.CARD_PAD);
-            this.drawString(cx + StatsSession.CARD_PAD, this.y + 6, -1, this.truncate(title, Math.max(titleMax, 20)), ctx);
-            if (badge != null) {
-                this.drawString(badgeX, this.y + 6, -1, GuiBase.TXT_GOLD + badge + GuiBase.TXT_RST, ctx);
-            }
-
             this.drawSlotGrid(ctx, cx + StatsSession.CARD_PAD, this.y + StatsSession.CARD_GRID_TOP, container);
-            cx += cardWidth + StatsSession.CARD_GAP;
+            cx += card.width + StatsSession.CARD_GAP;
         }
     }
 
@@ -255,18 +305,9 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         int textX = aggregate ? iconX + 20 : this.x + 44;
         RenderUtils.drawRect(iconX, y, 16, 16, COLOR_ICON_BG);
         ctx.renderItem(stack, iconX, y);
-
-        String name = this.itemDisplayName(stack);
-
-        if (aggregate) {
-            int countX = this.getColumnPosX(1);
-            this.drawString(textX, this.y + 7, -1, this.truncate(name, countX - textX - 8), ctx);
-            this.drawString(countX, this.y + 7, -1, String.valueOf(this.entry.count), ctx);
-        } else {
-            int countX = this.x + this.width - 60;
-            this.drawString(textX, this.y + 7, -1, this.truncate(name, countX - textX - 8), ctx);
-            this.drawString(countX, this.y + 7, -1, "x" + this.entry.count, ctx);
-        }
+        int countX = aggregate ? this.getColumnPosX(1) : this.x + this.width - 60;
+        this.drawString(textX, this.y + 7, -1, this.displayText, ctx);
+        this.drawString(countX, this.y + 7, -1, this.countText, ctx);
     }
 
     private String truncate(String text, int maxWidth) {
