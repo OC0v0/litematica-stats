@@ -150,6 +150,16 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         return false;
     }
 
+    public void moveBy(int dy) {
+        if (dy == 0) {
+            return;
+        }
+        this.setY(this.getY() + dy);
+        for (WidgetBase widget : this.subWidgets) {
+            widget.setY(widget.getY() + dy);
+        }
+    }
+
     @Override
     protected int getCurrentSortColumn() {
         return this.host.getStatsSortColumn();

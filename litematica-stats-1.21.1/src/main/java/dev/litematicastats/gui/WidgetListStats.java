@@ -18,6 +18,13 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
     private final StatsHost host;
     private boolean hasHeader;
     private int headerHeight;
+    private int contentsVersion;
+    private int builtVersion = -1;
+    private int builtFirstIndex;
+    private int builtFirstY;
+    private int builtUsable;
+    private int builtWidth;
+    private int contentTotalHeight;
 
     public WidgetListStats(int x, int y, int width, int height, StatsHost host) {
         super(x, y, width, height, null);
@@ -41,26 +48,19 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
     protected void reCreateListEntryWidgets() {
         // Pixel-based scrolling: the scrollbar value is a content offset in pixels,
         // so variable-height strips can always be scrolled fully into view.
-        this.listWidgets.clear();
-        this.maxVisibleBrowserEntries = 0;
         int usable = this.browserHeight - this.browserPaddingY - this.browserEntriesOffsetY;
         int totalHeight = 0;
         for (StatsEntry entry : this.listContents) {
             totalHeight += this.getBrowserEntryHeightFor(entry);
         }
+        this.contentTotalHeight = totalHeight;
 
-        int x = this.browserEntriesStartX;
-        int y = this.browserEntriesStartY;
-        WidgetStatsEntry header = this.createHeaderWidget(x, y, 0, usable, 0);
-        this.hasHeader = header != null;
-        this.headerHeight = header != null ? header.getHeight() : 0;
-        if (header != null) {
-            this.listWidgets.add(header);
-            y += this.headerHeight;
-            usable -= this.headerHeight;
-        }
+        boolean wantsHeader = this.host.getStatsTab() == StatsTab.ENTITIES
+                || (this.host.getStatsTab() == StatsTab.CONTENTS && this.host.isAggregateItems());
+        boolean hasHeader = wantsHeader && this.browserEntryHeight <= usable;
+        int headerHeight = hasHeader ? this.browserEntryHeight : 0;
 
-        int maxScroll = Math.max(0, totalHeight - usable);
+        int maxScroll = Math.max(0, totalHeight - (usable - headerHeight));
         this.scrollBar.setMaxValue(maxScroll);
         int offset = Math.min(Math.max(this.scrollBar.getValue(), 0), maxScroll);
 
@@ -74,16 +74,46 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
             entryStart += height;
             index++;
         }
-        int screenY = y + (entryStart - offset);
-        int bottom = y + usable;
+        int firstIndex = index;
+        int screenY = this.browserEntriesStartY + headerHeight + (entryStart - offset);
+        int bottom = this.browserEntriesStartY + usable;
+
+        // 可见条目范围没有变化时只平移已有控件，避免每个滚动像素都重建按钮和文本布局。
+        if (this.builtVersion == this.contentsVersion
+                && this.builtFirstIndex == firstIndex
+                && this.builtUsable == usable
+                && this.builtWidth == this.browserEntryWidth
+                && this.hasHeader == hasHeader) {
+            int dy = screenY - this.builtFirstY;
+            if (dy != 0) {
+                for (int i = this.hasHeader ? 1 : 0; i < this.listWidgets.size(); i++) {
+                    this.listWidgets.get(i).moveBy(dy);
+                }
+            }
+            this.builtFirstY = screenY;
+            return;
+        }
+
+        this.listWidgets.clear();
+        this.maxVisibleBrowserEntries = 0;
+        this.hasHeader = hasHeader;
+        this.headerHeight = headerHeight;
+        int x = this.browserEntriesStartX;
+        if (hasHeader) {
+            this.listWidgets.add(this.createHeaderWidget(x, this.browserEntriesStartY, 0, usable, 0));
+        }
         while (index < this.listContents.size() && screenY < bottom) {
             StatsEntry entry = this.listContents.get(index);
-            int height = this.getBrowserEntryHeightFor(entry);
             this.listWidgets.add(this.createListEntryWidget(x, screenY, index, (index & 1) != 0, entry));
-            screenY += height;
+            screenY += this.getBrowserEntryHeightFor(entry);
             index++;
             this.maxVisibleBrowserEntries++;
         }
+        this.builtVersion = this.contentsVersion;
+        this.builtFirstIndex = firstIndex;
+        this.builtFirstY = this.browserEntriesStartY + headerHeight + (entryStart - offset);
+        this.builtUsable = usable;
+        this.builtWidth = this.browserEntryWidth;
     }
 
     @Override
@@ -95,11 +125,7 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
     public void drawContents(GuiGraphics ctx, int mouseX, int mouseY, float partialTicks) {
         WidgetBase hovered = null;
         int scrollbarHeight = this.browserHeight - this.browserEntriesOffsetY - 8;
-        int totalHeight = 0;
-        for (StatsEntry entry : this.listContents) {
-            totalHeight += this.getBrowserEntryHeightFor(entry);
-        }
-        totalHeight = Math.max(totalHeight, scrollbarHeight);
+        int totalHeight = Math.max(this.contentTotalHeight, scrollbarHeight);
         this.scrollBar.render(mouseX, mouseY, partialTicks,
                 this.posX + this.browserWidth - 9, this.browserEntriesStartY + this.browserEntriesOffsetY,
                 8, scrollbarHeight, totalHeight);
@@ -141,6 +167,7 @@ public class WidgetListStats extends WidgetListBase<StatsEntry, WidgetStatsEntry
 
     @Override
     protected void refreshBrowserEntries() {
+        this.contentsVersion++;
         this.host.setContentsViewWidth(this.browserEntryWidth);
         this.host.setContentsFilter(this.getFilterText());
         super.refreshBrowserEntries();
