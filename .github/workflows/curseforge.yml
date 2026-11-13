@@ -46,7 +46,7 @@ jobs:
               > metadata.json
             curl -sS --fail-with-body --max-time 300 \
               -H "X-Api-Token: $CF_API_TOKEN" \
-              -F "metadata=@metadata.json;type=application/json" \
+              -F "metadata=<metadata.json;type=application/json" \
               -F "file=@$f" \
               "https://minecraft.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"
             echo
