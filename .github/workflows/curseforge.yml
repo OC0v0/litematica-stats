@@ -37,12 +37,22 @@ jobs:
           for f in jars/*.jar; do
             file=$(basename "$f")
             mc=$(echo "$file" | sed -E 's/^litematica-stats-([0-9]+\.[0-9]+(\.[0-9]+)?)-[0-9]+\.[0-9]+\.[0-9]+\.jar$/\1/')
-            echo "Uploading $file for Minecraft $mc"
+            case "$mc" in
+              1.18.2) mcid=9008 ;;
+              1.19.4) mcid=9776 ;;
+              1.20.1) mcid=9990 ;;
+              1.21.1) mcid=11779 ;;
+              1.21.11) mcid=14406 ;;
+              26.2) mcid=16498 ;;
+              26.3) mcid=17045 ;;
+              *) echo "Unknown Minecraft version: $mc"; exit 1 ;;
+            esac
+            echo "Uploading $file for Minecraft $mc (version id $mcid)"
             jq -n \
               --arg dn "$file" \
-              --arg mc "$mc" \
+              --argjson mcid "$mcid" \
               --arg cl "$CHANGELOG" \
-              '{changelog:$cl, changelogType:"markdown", displayName:$dn, releaseType:"release", gameVersions:[$mc,"Fabric"], relations:{projects:[{id:308892,type:"requiredDependency"},{id:303119,type:"requiredDependency"},{id:297344,type:"optionalDependency"}]}}' \
+              '{changelog:$cl, changelogType:"markdown", displayName:$dn, releaseType:"release", gameVersions:[$mcid,7499], relations:{projects:[{id:308892,slug:"litematica",type:"requiredDependency"},{id:303119,slug:"malilib",type:"requiredDependency"},{id:297344,slug:"tweakeroo",type:"optionalDependency"}]}}' \
               > metadata.json
             curl -sS --fail-with-body --max-time 300 \
               -H "X-Api-Token: $CF_API_TOKEN" \
