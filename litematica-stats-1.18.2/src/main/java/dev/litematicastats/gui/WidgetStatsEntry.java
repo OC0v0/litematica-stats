@@ -30,8 +30,12 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
     private final boolean isOdd;
     private String displayText;
     private String countText;
+    private String missingText;
+    private String availableText;
     private String headerFirst;
     private String headerSecond;
+    private String headerThird;
+    private String headerFourth;
     private List<CardRender> cards;
 
     public WidgetStatsEntry(int x, int y, int width, int height, boolean isOdd, StatsEntry entry,
@@ -41,7 +45,7 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         this.listWidget = listWidget;
         this.entry = entry;
         this.isOdd = isOdd;
-        this.columnCount = this.hasCountColumn() ? 2 : 1;
+        this.columnCount = this.hasCountColumn() ? 4 : 1;
 
         if (entry.kind == StatsEntry.Kind.STRIP) {
             int cx = x;
@@ -75,13 +79,23 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
                 }
                 this.displayText = name;
                 this.countText = String.valueOf(entry.entity.count());
+                this.missingText = entry.missing > 0
+                        ? GuiBase.TXT_RED + entry.missing + GuiBase.TXT_RST : String.valueOf(entry.missing);
+                this.availableText = String.valueOf(entry.available);
             }
             case ITEM -> {
                 boolean aggregate = this.isAggregateItemView();
                 int textX = aggregate ? this.getColumnPosX(0) + 20 : this.x + 44;
                 int countX = aggregate ? this.getColumnPosX(1) : this.x + this.width - 60;
                 this.displayText = this.truncate(this.itemDisplayName(entry.stack), countX - textX - 8);
-                this.countText = aggregate ? String.valueOf(entry.count) : "x" + entry.count;
+                if (aggregate) {
+                    this.countText = String.valueOf(entry.count);
+                    this.missingText = entry.missing > 0
+                            ? GuiBase.TXT_RED + entry.missing + GuiBase.TXT_RST : String.valueOf(entry.missing);
+                    this.availableText = String.valueOf(entry.available);
+                } else {
+                    this.countText = "x" + entry.count;
+                }
             }
             case CATEGORY, SINGLE_GROUP -> {
                 String color = entry.kind == StatsEntry.Kind.SINGLE_GROUP ? GuiBase.TXT_LIGHT_PURPLE : GuiBase.TXT_AQUA;
@@ -92,7 +106,9 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
             case HEADER -> {
                 String firstColumn = this.isAggregateItemView() ? "litematica-stats.gui.label.column.item" : "litematica-stats.gui.label.column.name";
                 this.headerFirst = GuiBase.TXT_BOLD + StringUtils.translate(firstColumn) + GuiBase.TXT_RST;
-                this.headerSecond = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.count") + GuiBase.TXT_RST;
+                this.headerSecond = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.total") + GuiBase.TXT_RST;
+                this.headerThird = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.missing") + GuiBase.TXT_RST;
+                this.headerFourth = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.available") + GuiBase.TXT_RST;
             }
             case STRIP -> {
                 this.cards = new ArrayList<>(entry.stripContainers.size());
@@ -173,12 +189,17 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
     @Override
     protected int getColumnPosX(int column) {
         int nameWidth = this.isAggregateItemView() ? this.host.getMaxAggregateItemNameWidth() : this.host.getMaxEntityNameWidth();
+        int countWidth = Math.max(this.host.getMaxEntityCountWidth(), 70);
         int x1 = this.x + 4;
         int x2 = x1 + nameWidth + 40;
+        int x3 = x2 + countWidth + 40;
+        int x4 = x3 + countWidth + 40;
         return switch (column) {
             case 0 -> x1;
             case 1 -> x2;
-            default -> x2 + this.host.getMaxEntityCountWidth() + 20;
+            case 2 -> x3;
+            case 3 -> x4;
+            default -> x4 + countWidth + 40;
         };
     }
 
@@ -195,7 +216,7 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         switch (this.entry.kind) {
             case HEADER -> {
                 int column = this.getMouseOverColumn(mouseX, mouseY);
-                if (column >= 0 && column < 2) {
+                if (column >= 0 && column < this.columnCount) {
                     this.host.setStatsSort(column);
                     this.listWidget.refreshEntries();
                     return true;
@@ -235,6 +256,8 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         int y = this.y + 7;
         this.drawString(this.getColumnPosX(0), y, -1, this.headerFirst, ctx);
         this.drawString(this.getColumnPosX(1), y, -1, this.headerSecond, ctx);
+        this.drawString(this.getColumnPosX(2), y, -1, this.headerThird, ctx);
+        this.drawString(this.getColumnPosX(3), y, -1, this.headerFourth, ctx);
         if (!this.listWidget.getSearchBarWidget().isSearchOpen()) {
             this.renderColumnHeader(mouseX, mouseY, Icons.ARROW_DOWN, Icons.ARROW_UP);
         }
@@ -247,6 +270,8 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         this.renderGuiItem(ctx, this.entry.entity.icon(), x1, y);
         this.drawString(x1 + 20, this.y + 7, -1, this.displayText, ctx);
         this.drawString(this.getColumnPosX(1), this.y + 7, -1, this.countText, ctx);
+        this.drawString(this.getColumnPosX(2), this.y + 7, -1, this.missingText, ctx);
+        this.drawString(this.getColumnPosX(3), this.y + 7, -1, this.availableText, ctx);
     }
 
     private void renderCategory(PoseStack ctx) {
@@ -331,6 +356,10 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
         int countX = aggregate ? this.getColumnPosX(1) : this.x + this.width - 60;
         this.drawString(textX, this.y + 7, -1, this.displayText, ctx);
         this.drawString(countX, this.y + 7, -1, this.countText, ctx);
+        if (aggregate) {
+            this.drawString(this.getColumnPosX(2), this.y + 7, -1, this.missingText, ctx);
+            this.drawString(this.getColumnPosX(3), this.y + 7, -1, this.availableText, ctx);
+        }
     }
 
     private String truncate(String text, int maxWidth) {
@@ -365,33 +394,104 @@ public class WidgetStatsEntry extends WidgetListEntrySortable<StatsEntry> {
                     }
                 }
             }
-            case ITEM -> this.renderItemHover(ctx, mouseX, mouseY);
+            case ITEM -> {
+                if (this.isAggregateItemView()) {
+                    this.renderCountTooltip(ctx, mouseX, mouseY, this.entry.stack,
+                            this.entry.stack.getHoverName().getString(), this.entry.count, this.entry.missing, List.of());
+                } else {
+                    this.renderItemHover(ctx, mouseX, mouseY);
+                }
+            }
             default -> {
             }
         }
     }
 
     private void renderEntityHover(PoseStack ctx, int mouseX, int mouseY) {
-        List<String> lines = new ArrayList<>();
-        lines.add(GuiBase.TXT_BOLD + this.entry.entity.name().getString());
-        lines.add(GuiBase.TXT_DARK_GRAY + this.entry.entity.id());
-        lines.add(StringUtils.translate("litematica-stats.gui.label.column.count") + ": " + this.entry.entity.count());
-        lines.add(GuiBase.TXT_GRAY + StringUtils.translate("litematica-stats.gui.label.entity_note"));
+        List<String> extras = new ArrayList<>();
+        extras.add(GuiBase.TXT_DARK_GRAY + this.entry.entity.id());
         if (this.entry.entity.icon().getItem() == Items.BARRIER) {
-            lines.add(GuiBase.TXT_GRAY + StringUtils.translate("litematica-stats.gui.label.no_item"));
+            extras.add(GuiBase.TXT_GRAY + StringUtils.translate("litematica-stats.gui.label.no_item"));
         }
+        extras.add(GuiBase.TXT_GRAY + StringUtils.translate("litematica-stats.gui.label.entity_note"));
 
         List<ContainerInfo> entityContainers = this.entry.entity.hasInventory()
                 ? this.host.getEntityContainers(this.entry.entity.id()) : List.of();
         boolean allSingleSlot = !entityContainers.isEmpty() && entityContainers.stream().allMatch(c -> c.gridSlots == 1);
         if (entityContainers.isEmpty() || allSingleSlot) {
             if (this.entry.entity.hasInventory()) {
-                lines.add(GuiBase.TXT_GOLD + StringUtils.translate("litematica-stats.gui.label.has_inventory"));
+                extras.add(GuiBase.TXT_GOLD + StringUtils.translate("litematica-stats.gui.label.has_inventory"));
             }
-            RenderUtils.drawHoverText(mouseX + 10, mouseY, lines, ctx);
+            this.renderCountTooltip(ctx, mouseX, mouseY, this.entry.entity.icon(),
+                    this.entry.entity.name().getString(), this.entry.entity.count(), this.entry.missing, extras);
             return;
         }
-        this.renderEntityGridTooltip(ctx, mouseX, mouseY, lines, entityContainers);
+        int boxHeight = this.renderCountTooltip(ctx, mouseX, mouseY, this.entry.entity.icon(),
+                this.entry.entity.name().getString(), this.entry.entity.count(), this.entry.missing, extras);
+        this.renderEntityGridTooltip(ctx, mouseX, mouseY + boxHeight + 4, List.of(), entityContainers);
+    }
+
+    private int renderCountTooltip(PoseStack ctx, int mouseX, int mouseY, ItemStack stack, String stackName,
+                                   int total, int missing, List<String> extraLines) {
+        String header1 = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.item") + GuiBase.TXT_RST;
+        String header2 = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.total") + GuiBase.TXT_RST;
+        String header3 = GuiBase.TXT_BOLD + StringUtils.translate("litematica-stats.gui.label.column.missing") + GuiBase.TXT_RST;
+        String countTotal = this.formatCount(total, stack.getMaxStackSize());
+        String countMissing = this.formatCount(missing, stack.getMaxStackSize());
+        int w1 = Math.max(this.getStringWidth(header1), Math.max(this.getStringWidth(header2), this.getStringWidth(header3)));
+        int w2 = Math.max(this.getStringWidth(stackName) + 20, Math.max(this.getStringWidth(countTotal), this.getStringWidth(countMissing)));
+        for (String line : extraLines) {
+            w2 = Math.max(w2, this.getStringWidth(line));
+        }
+        int boxWidth = w1 + w2 + 60;
+        int boxHeight = 58 + (extraLines.isEmpty() ? 0 : extraLines.size() * 10 + 6);
+        int screenWidth = GuiUtils.getScaledWindowWidth();
+        int screenHeight = GuiUtils.getScaledWindowHeight();
+        int x = mouseX + 10;
+        int y = mouseY - 10;
+        if (x + boxWidth > screenWidth - 2) {
+            x = mouseX - boxWidth - 10;
+        }
+        x = Math.max(2, x);
+        if (y + boxHeight > screenHeight - 2) {
+            y = screenHeight - boxHeight - 2;
+        }
+        y = Math.max(2, y);
+
+        RenderUtils.drawOutlinedBox(x, y, boxWidth, boxHeight, 0xF0100010, 0xFF999999);
+        int x1 = x + 10;
+        int x2 = x1 + w1 + 20;
+        int rowY = y + 10;
+        this.drawString(x1, rowY, -1, header1, ctx);
+        this.drawString(x2 + 20, rowY, -1, stackName, ctx);
+        RenderUtils.drawRect(x2, y + 6, 16, 16, 553648127);
+        this.renderGuiItem(ctx, stack, x2, y + 6);
+        this.drawString(x1, rowY + 16, -1, header2, ctx);
+        this.drawString(x2, rowY + 16, -1, countTotal, ctx);
+        this.drawString(x1, rowY + 32, -1, header3, ctx);
+        this.drawString(x2, rowY + 32, -1, countMissing, ctx);
+        int extraY = rowY + 48;
+        for (String line : extraLines) {
+            this.drawString(x1, extraY, -1, line, ctx);
+            extraY += 10;
+        }
+        return boxHeight;
+    }
+
+    private String formatCount(int total, int maxStackSize) {
+        String boxAbbr = StringUtils.translate("litematica.gui.label.material_list.abbr.shulker_box");
+        if (total > maxStackSize) {
+            double boxCount = total / (27.0 * maxStackSize);
+            if (maxStackSize > 1) {
+                int stacks = total / maxStackSize;
+                int remainder = total % maxStackSize;
+                return remainder > 0
+                        ? String.format("%d = %d x %d + %d = %.2f %s", total, stacks, maxStackSize, remainder, boxCount, boxAbbr)
+                        : String.format("%d = %d x %d = %.2f %s", total, stacks, maxStackSize, boxCount, boxAbbr);
+            }
+            return String.format("%d = %.2f %s", total, boxCount, boxAbbr);
+        }
+        return String.format("%d", total);
     }
 
     private String itemDisplayName(ItemStack stack) {

@@ -9,13 +9,17 @@ import fi.dy.masa.malilib.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.Registry;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -349,9 +353,22 @@ public class StatsSession {
         List<StatsEntry> rows = new ArrayList<>();
         if (tab == StatsTab.ENTITIES) {
             List<EntityCount> sorted = new ArrayList<>(this.entities);
+            Map<Item, Integer> inventory = this.inventoryItemTotals();
+            Map<EntityCount, Integer> availableMap = new IdentityHashMap<>();
+            Map<EntityCount, Integer> missingMap = new IdentityHashMap<>();
+            for (EntityCount entry : sorted) {
+                int available = entry.icon().getItem() == Items.BARRIER
+                        ? 0 : inventory.getOrDefault(entry.icon().getItem(), 0);
+                availableMap.put(entry, available);
+                missingMap.put(entry, Math.max(0, entry.count() - available));
+            }
             Comparator<EntityCount> comparator;
             if (this.sortColumn == 1) {
                 comparator = Comparator.comparingInt(EntityCount::count);
+            } else if (this.sortColumn == 2) {
+                comparator = Comparator.comparingInt(missingMap::get);
+            } else if (this.sortColumn == 3) {
+                comparator = Comparator.comparingInt(availableMap::get);
             } else {
                 Map<EntityCount, String> sortNames = new IdentityHashMap<>();
                 for (EntityCount entry : sorted) {
@@ -364,7 +381,10 @@ public class StatsSession {
             }
             sorted.sort(comparator);
             for (EntityCount entry : sorted) {
-                rows.add(StatsEntry.entity(entry));
+                StatsEntry row = StatsEntry.entity(entry);
+                row.available = availableMap.get(entry);
+                row.missing = missingMap.get(entry);
+                rows.add(row);
             }
         } else if (tab == StatsTab.CONTENTS) {
             if (this.aggregateItems) {
@@ -470,10 +490,24 @@ public class StatsSession {
             }
         }
 
+        Map<ItemKey, Integer> inventory = this.inventoryItemCounts();
+        for (Map.Entry<ItemKey, ItemAggregate> entry : aggregated.entrySet()) {
+            int available = inventory.getOrDefault(entry.getKey(), 0);
+            entry.getValue().available = available;
+            entry.getValue().missing = Math.max(0, entry.getValue().count - available);
+        }
+
         List<ItemAggregate> sorted = new ArrayList<>(aggregated.values());
-        Comparator<ItemAggregate> comparator = this.sortColumn == 1
-                ? Comparator.comparingInt(a -> a.count)
-                : Comparator.comparing(a -> a.nameLower);
+        Comparator<ItemAggregate> comparator;
+        if (this.sortColumn == 1) {
+            comparator = Comparator.comparingInt(a -> a.count);
+        } else if (this.sortColumn == 2) {
+            comparator = Comparator.comparingInt(a -> a.missing);
+        } else if (this.sortColumn == 3) {
+            comparator = Comparator.comparingInt(a -> a.available);
+        } else {
+            comparator = Comparator.comparing(a -> a.nameLower);
+        }
         if (this.sortReverse) {
             comparator = comparator.reversed();
         }
@@ -483,9 +517,42 @@ public class StatsSession {
         for (ItemAggregate aggregate : sorted) {
             ItemStack display = aggregate.stack.copy();
             display.setCount(aggregate.count);
-            rows.add(StatsEntry.item(display, aggregate.count));
+            StatsEntry row = StatsEntry.item(display, aggregate.count);
+            row.available = aggregate.available;
+            row.missing = aggregate.missing;
+            rows.add(row);
         }
         return rows;
+    }
+
+    private Map<ItemKey, Integer> inventoryItemCounts() {
+        Map<ItemKey, Integer> counts = new HashMap<>();
+        Player player = Minecraft.getInstance().player;
+        if (player == null) {
+            return counts;
+        }
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (!stack.isEmpty()) {
+                counts.merge(new ItemKey(stack.getItem(), stack.getTag()), stack.getCount(), Integer::sum);
+            }
+        }
+        return counts;
+    }
+
+    private Map<Item, Integer> inventoryItemTotals() {
+        Map<Item, Integer> counts = new HashMap<>();
+        Player player = Minecraft.getInstance().player;
+        if (player == null) {
+            return counts;
+        }
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (!stack.isEmpty()) {
+                counts.merge(stack.getItem(), stack.getCount(), Integer::sum);
+            }
+        }
+        return counts;
     }
 
     public List<ContainerInfo> getEntityContainers(String entityId) {
@@ -537,6 +604,8 @@ public class StatsSession {
         final ItemStack stack;
         final String nameLower;
         int count;
+        int available;
+        int missing;
 
         ItemAggregate(ItemStack stack) {
             this.stack = stack;

@@ -16,6 +16,8 @@ public class StatsEntry {
     @Nullable
     public final ItemStack stack;
     public final int count;
+    public int available;
+    public int missing;
     @Nullable
     public final String categoryKey;
     @Nullable
