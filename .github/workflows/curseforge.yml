@@ -52,7 +52,7 @@ jobs:
               --arg dn "$file" \
               --argjson mcid "$mcid" \
               --arg cl "$CHANGELOG" \
-              '{changelog:$cl, changelogType:"markdown", displayName:$dn, releaseType:"release", gameVersions:[$mcid,7499], relations:{projects:[{id:308892,slug:"litematica",type:"requiredDependency"},{id:303119,slug:"malilib",type:"requiredDependency"},{id:297344,slug:"tweakeroo",type:"optionalDependency"}]}}' \
+              '{changelog:$cl, changelogType:"markdown", displayName:$dn, releaseType:"release", gameVersions:[$mcid,7499,9638], relations:{projects:[{id:308892,slug:"litematica",type:"requiredDependency"},{id:303119,slug:"malilib",type:"requiredDependency"},{id:297344,slug:"tweakeroo",type:"optionalDependency"}]}}' \
               > metadata.json
             curl -sS --fail-with-body --max-time 300 \
               -H "X-Api-Token: $CF_API_TOKEN" \
