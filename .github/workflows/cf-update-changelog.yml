@@ -1,0 +1,44 @@
+name: Update CurseForge Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_ids:
+        description: Comma-separated CurseForge file IDs
+        required: true
+      changelog:
+        description: Markdown changelog (leave empty to use the 1.0.2 text)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update file metadata
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_PROJECT_ID: "1800138"
+          FILE_IDS: ${{ inputs.file_ids }}
+          CHANGELOG_INPUT: ${{ inputs.changelog }}
+        run: |
+          set -euo pipefail
+          CHANGELOG="$CHANGELOG_INPUT"
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG=$'- Entity list and unified container-items view now show Total / Missing / Available columns\n- Hovering an entity or an aggregated item row shows the material-list style tooltip with shulker-box count conversion\n- Available counts are read from the player inventory (spawn eggs for entities; matching items including NBT/components)'
+          fi
+          IFS=',' read -ra IDS <<< "$FILE_IDS"
+          for id in "${IDS[@]}"; do
+            id="$(echo "$id" | xargs)"
+            echo "Updating file $id"
+            jq -n --argjson fid "$id" --arg cl "$CHANGELOG" \
+              '{fileID:$fid, changelog:$cl, changelogType:"markdown"}' > metadata.json
+            curl -sS --fail-with-body --max-time 120 \
+              -H "X-Api-Token: $CF_API_TOKEN" \
+              -F "metadata=<metadata.json;type=application/json" \
+              "https://minecraft.curseforge.com/api/projects/$CF_PROJECT_ID/update-file"
+            echo
+          done

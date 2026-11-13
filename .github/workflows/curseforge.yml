@@ -33,7 +33,7 @@ jobs:
           CF_PROJECT_ID: "1800138"
         run: |
           set -euo pipefail
-          CHANGELOG=$'- Fixed the scrollbar becoming unusably small on very long lists\n- Improved performance: faster schematic scanning and smoother scrolling'
+          CHANGELOG=$'- Entity list and unified container-items view now show Total / Missing / Available columns\n- Hovering an entity or an aggregated item row shows the material-list style tooltip with shulker-box count conversion\n- Available counts are read from the player inventory (spawn eggs for entities; matching items including NBT/components)'
           for f in jars/*.jar; do
             file=$(basename "$f")
             mc=$(echo "$file" | sed -E 's/^litematica-stats-([0-9]+\.[0-9]+(\.[0-9]+)?)-[0-9]+\.[0-9]+\.[0-9]+\.jar$/\1/')
